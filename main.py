@@ -428,7 +428,8 @@ import tempfile
 import time
 from app.config_loader import load_config
 from app.s3_handler import S3Handler
-from app.ollama_analyzer import run_ollama_analysis
+from app.activation import run_activation_detection, insert_activation_results
+# from app.ollama_analyzer import run_ollama_analysis
 from app.file_uploader import FileUploader
 from app.db_handler import initialize_db_connection, close_db_connection
 from app.visicooler import run_visicooler_analysis, check_visibilitydetails_schema
@@ -568,7 +569,7 @@ def execute_models(pod_id, iterationid, stagingid):
     cur = None
     try:
         config = load_config('config.json')
-        ollama_config = config['ollama_config']
+        # ollama_config = config['ollama_config']
         s3_config = config['s3_config']
         db_config = config['db_config']
         visicooler_config = config['visicooler_config']
@@ -637,41 +638,51 @@ def execute_models(pod_id, iterationid, stagingid):
             conn = None
             cur = None
 
-            # Run Ollama analysis with shared stagingid
-            logger.info("Starting Ollama analysis")
-            try:
-                ollama_results, ollama_csv = run_ollama_analysis(
-                    image_paths=image_paths,
-                    image_folder=temp_dir,
-                    output_csv=ollama_config['output_csv'],
-                    config_path='config.json',
-                    class_ids_path=ollama_config['class_ids_path'],
-                    ollama_host=ollama_config['ollama_host'],
-                    s3_handler=s3_handler,
-                    s3_annotated_folder=f"{ollama_config['output_s3_folder']}VisibleItem_{cyclecountid}",
-                    db_config=db_config,
-                    cyclecountid=cyclecountid,
-                    stagingid=stagingid
-                )
-                logger.info(f"Ollama analysis complete: {len(ollama_results)} records generated")
-            except Exception as e:
-                logger.error(f"Ollama analysis failed: {e}")
-                logger.error(traceback.format_exc())
-                ollama_results, ollama_csv = [], None
+            # Run Activation 
+            activation_results = run_activation_detection(image_paths,config,s3_handler,stagingid)
+            logger.info(f"Activation detections: {len(activation_results)}")
 
-            # Upload Ollama CSV to S3
-            if ollama_csv and os.path.exists(ollama_csv):
-                logger.info("Uploading Ollama CSV to S3")
-                try:
-                    s3_handler.upload_file_to_s3(
-                        ollama_csv,
-                        f"{ollama_config['output_s3_folder']}VisibleItem_{cyclecountid}/analysis_results.csv"
-                    )
-                    logger.info("Ollama CSV uploaded successfully")
-                except Exception as e:
-                    logger.error(f"CSV upload failed: {e}")
-            else:
-                logger.warning("No Ollama CSV to upload")
+            # Insert activation results into DB
+            try:
+                insert_activation_results(db_config=db_config,activation_results=activation_results,stagingid=stagingid)
+            except Exception as e:
+                logger.error(f"Activation DB insert failed: {e}")
+
+            # # Run Ollama analysis with shared stagingid
+            # logger.info("Starting Ollama analysis")
+            # try:
+            #     ollama_results, ollama_csv = run_ollama_analysis(
+            #         image_paths=image_paths,
+            #         image_folder=temp_dir,
+            #         output_csv=ollama_config['output_csv'],
+            #         config_path='config.json',
+            #         class_ids_path=ollama_config['class_ids_path'],
+            #         ollama_host=ollama_config['ollama_host'],
+            #         s3_handler=s3_handler,
+            #         s3_annotated_folder=f"{ollama_config['output_s3_folder']}VisibleItem_{cyclecountid}",
+            #         db_config=db_config,
+            #         cyclecountid=cyclecountid,
+            #         stagingid=stagingid
+            #     )
+            #     logger.info(f"Ollama analysis complete: {len(ollama_results)} records generated")
+            # except Exception as e:
+            #     logger.error(f"Ollama analysis failed: {e}")
+            #     logger.error(traceback.format_exc())
+            #     ollama_results, ollama_csv = [], None
+
+            # # Upload Ollama CSV to S3
+            # if ollama_csv and os.path.exists(ollama_csv):
+            #     logger.info("Uploading Ollama CSV to S3")
+            #     try:
+            #         s3_handler.upload_file_to_s3(
+            #             ollama_csv,
+            #             f"{ollama_config['output_s3_folder']}VisibleItem_{cyclecountid}/analysis_results.csv"
+            #         )
+            #         logger.info("Ollama CSV uploaded successfully")
+            #     except Exception as e:
+            #         logger.error(f"CSV upload failed: {e}")
+            # else:
+            #     logger.warning("No Ollama CSV to upload")
 
             # Update processed_flag to 'Y'
             logger.info("Updating processed_flag in database")
@@ -691,7 +702,7 @@ def execute_models(pod_id, iterationid, stagingid):
             logger.info(f"  Stores processed: {unique_stores}")
             logger.info(f"  Images processed: {len(image_paths)}")
             logger.info(f"  Visicooler records: {len(visicooler_records)}")
-            logger.info(f"  Ollama records: {len(ollama_results) if ollama_results else 0}")
+            # logger.info(f"  Ollama records: {len(ollama_results) if ollama_results else 0}")
             logger.info("=" * 60)
 
         return True

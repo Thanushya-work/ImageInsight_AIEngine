@@ -1,3 +1,8 @@
+# outputs
+outputs/
+runs/
+activation_annotated/
+
 # AWS credentials & secrets
 aws_credentials.json
 .env
