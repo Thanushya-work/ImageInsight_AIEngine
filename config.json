@@ -8,7 +8,7 @@
   },
   "s3_config": {
     "bucket_name": "imageinsightimagesbeverages",
-    "image_folder_s3": "STORE_IMAGES/",
+    "image_folder_s3": "april_store_images/",
     "access_key": "AKIA6D6JBNORLYOWHTZZ",
     "secret_key": "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",
     "region": "ap-south-1"

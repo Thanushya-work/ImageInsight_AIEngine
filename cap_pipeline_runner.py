@@ -90,7 +90,7 @@ class PipelineResult:
 
 
 # ── SQL definitions ────────────────────────────────────────────────────────────
-def _build_queries(iteration_id: int) -> list[dict]:
+def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
     """Return all pipeline SQL statements in execution order."""
     iid = int(iteration_id)          # guard against injection
     return [
@@ -332,7 +332,7 @@ def _build_queries(iteration_id: int) -> list[dict]:
                     cpt.x1, cpt.y1, cpt.x2, cpt.y2,
                     NULL,
                     cpt.image_file_name,
-                    'STORE_IMAGES/' || cpt.image_file_name,
+                    {image_folder!r} || cpt.image_file_name,
                     cpt.s3path_annotated_file
                 FROM temp.cap_prediction_temp cpt
                 JOIN image_map im
@@ -355,7 +355,7 @@ def _build_queries(iteration_id: int) -> list[dict]:
 
 
 # ── Core runner ────────────────────────────────────────────────────────────────
-def run_cap_pipeline(db_config: dict, iteration_id: int) -> PipelineResult:
+def run_cap_pipeline(db_config: dict, iteration_id: int, config: dict) -> PipelineResult:
     """
     Execute all 8 CAP post-processing steps sequentially.
 
@@ -420,7 +420,8 @@ def run_cap_pipeline(db_config: dict, iteration_id: int) -> PipelineResult:
     try:
         with conn:
             with conn.cursor() as cur:
-                for query in _build_queries(iteration_id):
+                image_folder = config['s3_config']['image_folder_s3'].rstrip('/') + '/'
+                for query in _build_queries(iteration_id, image_folder):
                     step_start = time.monotonic()
                     step_num = query["step"]
                     step_name = query["name"]
