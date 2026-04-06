@@ -203,14 +203,14 @@ def get_or_create_iterationid(conn):
 # --------------------------------------------------------
 
 
-def execute_models(pod_id, iterationid, stagingid):
+def execute_models(pod_id, iterationid, stagingid, batch_number):
 
     conn = None
     cur = None
 
     try:
 
-        logger.info(f"[Iteration: {iterationid}] [Staging: {stagingid}] Starting execution for {pod_id}")
+        logger.info(f"Batch {batch_number} → Starting execution for {pod_id}")
 
         config = load_config('config.json')
 
@@ -234,7 +234,7 @@ def execute_models(pod_id, iterationid, stagingid):
 
             image_paths, failed_files = s3_handler.download_images_from_s3(temp_dir, pod_id)
 
-            logger.info(f"[Iteration: {iterationid}] [Staging: {stagingid}] Downloaded {len(image_paths)} images")
+            logger.info(f"Batch {batch_number} → Downloaded {len(image_paths)} images")
 
             if not image_paths:
 
@@ -253,7 +253,7 @@ def execute_models(pod_id, iterationid, stagingid):
 
             cyclecountid = (row[0] if row and row[0] else 0) + 1
 
-            logger.info(f"[Iteration: {iterationid}] [Staging: {stagingid}] Running visicooler analysis")
+            logger.info(f"Batch {batch_number} → Running visicooler analysis")
 
             run_visicooler_analysis(
                 image_paths=image_paths,
@@ -269,7 +269,7 @@ def execute_models(pod_id, iterationid, stagingid):
             conn = None
             cur = None
 
-            logger.info(f"[Iteration: {iterationid}] [Staging: {stagingid}] Running activation detection")
+            logger.info(f"Batch {batch_number} → Running activation detection")
 
             activation_results = run_activation_detection(
                 image_paths,
@@ -290,7 +290,7 @@ def execute_models(pod_id, iterationid, stagingid):
 
             file_uploader.update_processed_flag(conn, image_paths)
 
-            logger.info(f"[Iteration: {iterationid}] [Staging: {stagingid}] Processed flag updated successfully")
+            logger.info(f"Batch {batch_number} → Processed flag updated successfully")
 
         return True
 
@@ -370,6 +370,13 @@ def main():
                     config=config
                 )
 
+                logger.info("="*60)
+                logger.info("PIPELINE COMPLETED")
+                logger.info(f"Iteration ID: {iterationid}")
+                logger.info(f"Staging ID: {stagingid}")
+                logger.info(f"Total Batches: {batch_number}")
+                logger.info("="*60)
+
                 break
 
             if batch_size is None:
@@ -422,13 +429,13 @@ def main():
 
             batch_number += 1
 
-            logger.info(f"[Iteration: {iterationid}] [Staging: {stagingid}] Starting Batch {batch_number}")
+            logger.info(f"Starting Batch {batch_number}")
 
             current_batch_retries = 0
 
             while current_batch_retries < max_batch_retries:
 
-                success = execute_models(pod_id, iterationid, stagingid)
+                success = execute_models(pod_id, iterationid, stagingid, batch_number)
 
                 if success:
 
