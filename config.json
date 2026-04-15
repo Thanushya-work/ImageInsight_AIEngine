@@ -26,5 +26,9 @@
     "cap_conf_threshold": 0.1,
     "sku_conf_threshold": 0.12,
     "conf_threshold": 0.12
-}
+  },
+  "sovi_model": {
+    "model_path": "data/sovi.pt",
+    "confidence": 0.4
+  }
 }

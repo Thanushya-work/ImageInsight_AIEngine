@@ -4,11 +4,11 @@
 
 from ultralytics import YOLO
 
-model = YOLO("data/weights.pt")
+model = YOLO("data/activation_new.pt")
 
 results = model(
     "test.jpg",
-    conf=0.12
+    conf=0.3
 )
 
 for r in results:

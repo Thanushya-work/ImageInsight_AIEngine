@@ -14,6 +14,7 @@ from app.activation import run_activation_detection, insert_activation_results
 from app.file_uploader import FileUploader
 from app.db_handler import initialize_db_connection, close_db_connection
 from app.visicooler import run_visicooler_analysis, check_visibilitydetails_schema
+from app.sovi_pipeline import run_sovi_pipeline
 from cap_pipeline_runner import run_cap_pipeline
 
 
@@ -369,6 +370,8 @@ def main():
                     iteration_id=iterationid,
                     config=config
                 )
+
+                run_sovi_pipeline(config, iterationid)
 
                 logger.info("="*60)
                 logger.info("PIPELINE COMPLETED")
