@@ -7,6 +7,8 @@ import os
 import sys
 import tempfile
 import time
+import json
+from collections import Counter
 
 from app.config_loader import load_config
 from app.s3_handler import S3Handler
@@ -29,6 +31,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 STALE_TIMEOUT_MINUTES = 60
+
+pipeline_stats = {
+    "total_detections": 0,
+    "total_inserted": 0,
+    "total_failed": 0,
+    "failed_records": []
+}
 
 
 def mark_batch_failed(db_config, pod_id):
@@ -278,11 +287,16 @@ def execute_models(pod_id, iterationid, stagingid, batch_number):
                 stagingid
             )
 
-            insert_activation_results(
+            pipeline_stats["total_detections"] += len(activation_results)
+            result = insert_activation_results(
                 db_config=db_config,
                 activation_results=activation_results,
                 stagingid=stagingid
             )
+
+            pipeline_stats["total_inserted"] += result["inserted"]
+            pipeline_stats["total_failed"] += result["failed"]
+            pipeline_stats["failed_records"].extend(result["failed_records"])
 
             conn, cur = initialize_db_connection(db_config)
 
@@ -487,6 +501,29 @@ def main():
 
             time.sleep(10)
 
+    logger.info("="*60)
+    logger.info("===== PIPELINE FINAL REPORT =====")
+    logger.info(f"Total Detections: {pipeline_stats['total_detections']}")
+    logger.info(f"Total Inserted: {pipeline_stats['total_inserted']}")
+    logger.info(f"Total Failed: {pipeline_stats['total_failed']}")
+
+    if pipeline_stats["failed_records"]:
+        error_counts = Counter(
+            fr["error"] for fr in pipeline_stats["failed_records"]
+        )
+        logger.info("Failure breakdown:")
+        for error, count in error_counts.items():
+            logger.info(f"  {count}x {error}")
+    else:
+        logger.info("No failed records.")
+
+    os.makedirs("outputs", exist_ok=True)
+    file_name = f"outputs/pipeline_failure_report_{stagingid}.json"
+
+    with open(file_name, "w", encoding="utf-8") as fp:
+        json.dump(pipeline_stats, fp, default=str, indent=2)
+
+    logger.info(f"Saved pipeline failure report to {file_name}")
     logger.info(f"Pipeline execution completed for {pod_id}")
 
 

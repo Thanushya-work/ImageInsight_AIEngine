@@ -160,9 +160,15 @@ def run_activation_detection(image_paths, config, s3_handler, stagingid):
 
 def insert_activation_results(db_config, activation_results, stagingid):
 
+    stats = {
+        "inserted": 0,
+        "failed": 0,
+        "failed_records": []
+    }
+
     if not activation_results:
         logger.info("No activation results to insert")
-        return
+        return stats
 
     conn = pg.connect(
         host=db_config['host'],
@@ -187,8 +193,7 @@ def insert_activation_results(db_config, activation_results, stagingid):
 
     # Get max existing rowid
     cur.execute(
-        "SELECT COALESCE(MAX(rowid),0) FROM orgi.visibilityitemsstaging WHERE stagingid=%s",
-        (stagingid,)
+        "SELECT COALESCE(MAX(rowid),0) FROM orgi.visibilityitemsstaging",
     )
 
     max_rowid = int(cur.fetchone()[0])
@@ -199,7 +204,6 @@ def insert_activation_results(db_config, activation_results, stagingid):
     rowid = max_rowid + 1
 
     for r in activation_results:
-
         records.append(
             (
                 rowid,
@@ -218,7 +222,6 @@ def insert_activation_results(db_config, activation_results, stagingid):
                 r["s3path_annotated_file"]
             )
         )
-
         rowid += 1
 
     insert_query = """
@@ -242,10 +245,38 @@ def insert_activation_results(db_config, activation_results, stagingid):
     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
     """
 
-    cur.executemany(insert_query, records)
+    try:
+        cur.executemany(insert_query, records)
+        conn.commit()
+        stats["inserted"] = len(records)
+        logger.info(f"Inserted {len(records)} activation results into visibilityitemsstaging")
 
-    conn.commit()
+    except Exception as bulk_e:
+        conn.rollback()
+        logger.warning(
+            f"Bulk insert failed, switching to row-by-row insert: {bulk_e}"
+        )
 
-    close_db_connection(conn, cur)
+        for record, orig in zip(records, activation_results):
+            try:
+                cur.execute(insert_query, record)
+                conn.commit()
+                stats["inserted"] += 1
+            except Exception as row_e:
+                conn.rollback()
+                stats["failed_records"].append(
+                    {
+                        "record": orig,
+                        "error": str(row_e)
+                    }
+                )
 
-    logger.info(f"Inserted {len(records)} activation results into visibilityitemsstaging")
+        stats["failed"] = len(stats["failed_records"])
+        if stats["failed_records"]:
+            logger.error(
+                f"Row-by-row insert completed with {stats['failed']} failed records"
+            )
+    finally:
+        close_db_connection(conn, cur)
+
+    return stats
