@@ -52,6 +52,7 @@ class S3Handler:
                 FROM orgi.fileupload
                 WHERE processed_flag = 'I' 
                   AND podid = %s
+                  AND subcategory_id != 3
                 ORDER BY storeid, uploadtimestamp ASC
                 """,
                 (pod_id,)

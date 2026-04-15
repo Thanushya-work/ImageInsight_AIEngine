@@ -1,22 +1,22 @@
 """
-cap_pipeline_runner.py
-======================
-CAP Prediction Post-Processing Pipeline
-----------------------------------------
-Executes all 8 SQL steps sequentially after the main image-analysis pipeline
+sovi_pipeline_runner.py
+=======================
+SOVI Post-Processing Pipeline
+-----------------------------
+Executes all 8 SQL steps sequentially after the main SOVI image-analysis pipeline
 completes.  Drop this file into your project root (alongside main.py) and
-call ``run_cap_pipeline(db_config, iteration_id)`` from main.py.
+call ``run_sovi_post_pipeline(db_config, iteration_id)`` from main.py.
 
 Steps
 -----
-1.  Create unique index on temp.cap_prediction_temp
+1.  Create unique index on temp.cap_prediction_temp_sovi
 2.  Insert CAP predictions from SKU table
 3.  Vertical match  – assign prod_class_id by horizontal overlap
 4.  Nearest-match fallback – centroid distance for remaining NULLs
 5.  Remove small caps inside SKU bounding box (< 15 % area)
 6.  Remove duplicate rows
-7.  Populate orgi.coolermetricsmaster
-8.  Populate orgi.coolermetricstransaction & update caserid
+7.  Populate orgi.coolermetricsmaster_sovi
+8.  Populate orgi.coolermetricstransaction_sovi & update caserid
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ class PipelineResult:
     def log_summary(self) -> None:
         sep = "=" * 100
         logger.info(sep)
-        logger.info("  CAP PREDICTION PIPELINE  –  SUMMARY")
+        logger.info("  SOVI POST-PROCESSING PIPELINE  –  SUMMARY")
         logger.info(sep)
         logger.info(f"  Iteration ID   : {self.iteration_id}")
         logger.info(f"  Overall status : {self.overall_status.upper()}")
@@ -97,10 +97,10 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
         # ── 1 ─────────────────────────────────────────────────────────────────
         {
             "step": 1,
-            "name": "Create unique index on cap_prediction_temp",
+            "name": "Create unique index on cap_prediction_temp_sovi",
             "sql": """
-                CREATE UNIQUE INDEX IF NOT EXISTS uq_cap_box
-                ON temp.cap_prediction_temp (
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_cap_box_sovi
+                ON temp.cap_prediction_temp_sovi (
                     store_id, image_file_name, s3path_annotated_file,
                     iteration_id, cap_class_id, x1, y1, x2, y2
                 );
@@ -111,7 +111,7 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
             "step": 2,
             "name": "Insert CAP predictions from SKU table",
             "sql": """
-                INSERT INTO temp.cap_prediction_temp (
+                INSERT INTO temp.cap_prediction_temp_sovi (
                     store_id, image_file_name, s3path_annotated_file,
                     iteration_id, cap_class_id, prod_class_id,
                     x1, x2, y1, y2, shelfnumber, brand_name
@@ -122,7 +122,7 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
                     s.prod_class_id AS cap_class_id,
                     NULL            AS prod_class_id,
                     s.x1, s.x2, s.y1, s.y2, s.shelfnumber, s.brand_name
-                FROM temp.sku_prediction_temp s
+                FROM temp.sku_prediction_temp_sovi s
                 ON CONFLICT DO NOTHING;
             """,
         },
@@ -144,15 +144,15 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
                                 ((c.x1 + c.x2) / 2.0) - ((s.x1 + s.x2) / 2.0)
                             )
                         ) AS rn
-                    FROM temp.cap_prediction_temp c
-                    JOIN temp.sku_prediction_temp s
+                    FROM temp.cap_prediction_temp_sovi c
+                    JOIN temp.sku_prediction_temp_sovi s
                       ON  c.store_id              = s.store_id
                      AND c.image_file_name        = s.image_file_name
                      AND c.s3path_annotated_file  = s.s3path_annotated_file
                      AND c.iteration_id           = s.iteration_id
                     WHERE ((c.x1 + c.x2) / 2.0) BETWEEN s.x1 AND s.x2
                 )
-                UPDATE temp.cap_prediction_temp c
+                UPDATE temp.cap_prediction_temp_sovi c
                 SET prod_class_id = v.prod_class_id
                 FROM vertical_match v
                 WHERE c.store_id              = v.store_id
@@ -183,15 +183,15 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
                                 POWER(((c.x1 + c.x2) / 2.0) - ((s.x1 + s.x2) / 2.0), 2)
                               + POWER(((c.y1 + c.y2) / 2.0) - ((s.y1 + s.y2) / 2.0), 2)
                         ) AS rn
-                    FROM temp.cap_prediction_temp c
-                    JOIN temp.sku_prediction_temp s
+                    FROM temp.cap_prediction_temp_sovi c
+                    JOIN temp.sku_prediction_temp_sovi s
                       ON  c.store_id              = s.store_id
                      AND c.image_file_name        = s.image_file_name
                      AND c.s3path_annotated_file  = s.s3path_annotated_file
                      AND c.iteration_id           = s.iteration_id
                     WHERE c.prod_class_id IS NULL
                 )
-                UPDATE temp.cap_prediction_temp c
+                UPDATE temp.cap_prediction_temp_sovi c
                 SET prod_class_id = n.prod_class_id
                 FROM nearest_match n
                 WHERE c.store_id              = n.store_id
@@ -209,8 +209,8 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
             "step": 5,
             "name": "Remove small caps inside SKU bounding box (< 15 % area)",
             "sql": """
-                DELETE FROM temp.cap_prediction_temp c
-                USING temp.sku_prediction_temp s
+                DELETE FROM temp.cap_prediction_temp_sovi c
+                USING temp.sku_prediction_temp_sovi s
                 WHERE c.store_id              = s.store_id
                   AND c.image_file_name       = s.image_file_name
                   AND c.s3path_annotated_file = s.s3path_annotated_file
@@ -229,13 +229,13 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
             "step": 6,
             "name": "Remove duplicate rows",
             "sql": """
-                DELETE FROM temp.cap_prediction_temp c
+                DELETE FROM temp.cap_prediction_temp_sovi c
                 USING (
                     SELECT
                         store_id, image_file_name, s3path_annotated_file,
                         iteration_id, cap_class_id, x1, y1,
                         MIN(ctid) AS keep_ctid
-                    FROM temp.cap_prediction_temp
+                    FROM temp.cap_prediction_temp_sovi
                     GROUP BY
                         store_id, image_file_name, s3path_annotated_file,
                         iteration_id, cap_class_id, x1, y1
@@ -254,7 +254,7 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
         # ── 7 ─────────────────────────────────────────────────────────────────
         {
             "step": 7,
-            "name": "Populate orgi.coolermetricsmaster",
+            "name": "Populate orgi.coolermetricsmaster_sovi",
             "sql": f"""
                 WITH image_map AS (
                     SELECT DISTINCT
@@ -269,10 +269,10 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
                                 cpt.image_file_name,
                                 cpt.s3path_annotated_file
                         ) AS iterationtranid
-                    FROM temp.cap_prediction_temp cpt
+                    FROM temp.cap_prediction_temp_sovi cpt
                     WHERE cpt.iteration_id = {iid}
                 )
-                INSERT INTO orgi.coolermetricsmaster (
+                INSERT INTO orgi.coolermetricsmaster_sovi (
                     iterationid, iterationtranid, storeid,
                     caserid, modelrun, processed_flag
                 )
@@ -291,7 +291,7 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
         # ── 8 ─────────────────────────────────────────────────────────────────
         {
             "step": 8,
-            "name": "Populate orgi.coolermetricstransaction & update caserid",
+            "name": "Populate orgi.coolermetricstransaction_sovi & update caserid",
             "sql": f"""
                 WITH image_map AS (
                     SELECT DISTINCT
@@ -306,10 +306,10 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
                                 cpt.image_file_name,
                                 cpt.s3path_annotated_file
                         ) AS iterationtranid
-                    FROM temp.cap_prediction_temp cpt
+                    FROM temp.cap_prediction_temp_sovi cpt
                     WHERE cpt.iteration_id = {iid}
                 )
-                INSERT INTO orgi.coolermetricstransaction (
+                INSERT INTO orgi.coolermetricstransaction_sovi (
                     iterationid, iterationtranid, shelfnumber,
                     productsequenceno, productclassid,
                     x1, y1, x2, y2, confidence,
@@ -334,7 +334,7 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
                     cpt.image_file_name,
                     {image_folder!r} || cpt.image_file_name,
                     cpt.s3path_annotated_file
-                FROM temp.cap_prediction_temp cpt
+                FROM temp.cap_prediction_temp_sovi cpt
                 JOIN image_map im
                   ON  im.iterationid           = cpt.iteration_id
                  AND im.storeid                = cpt.store_id
@@ -342,7 +342,7 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
                  AND im.s3path_annotated_file  = cpt.s3path_annotated_file
                 WHERE cpt.iteration_id = {iid};
 
-                UPDATE orgi.coolermetricsmaster c
+                UPDATE orgi.coolermetricsmaster_sovi c
                 SET caserid = p.caserid
                 FROM orgi.storemaster s
                 JOIN orgi.puritymapping p
@@ -355,9 +355,9 @@ def _build_queries(iteration_id: int, image_folder: str) -> list[dict]:
 
 
 # ── Core runner ────────────────────────────────────────────────────────────────
-def run_cap_pipeline(db_config: dict, iteration_id: int, config: dict) -> PipelineResult:
+def run_sovi_post_pipeline(db_config: dict, iteration_id: int, config: dict) -> PipelineResult:
     """
-    Execute all 8 CAP post-processing steps sequentially.
+    Execute all 8 SOVI post-processing steps sequentially.
 
     Parameters
     ----------
@@ -379,7 +379,7 @@ def run_cap_pipeline(db_config: dict, iteration_id: int, config: dict) -> Pipeli
     overall_status = "success"
 
     logger.info("=" * 100)
-    logger.info(f"  CAP PREDICTION PIPELINE  –  START  (iteration_id={iteration_id})")
+    logger.info(f"  SOVI POST-PROCESSING PIPELINE  –  START  (iteration_id={iteration_id})")
     logger.info("=" * 100)
 
     # ── Open connection ────────────────────────────────────────────────────────
