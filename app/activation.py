@@ -253,6 +253,11 @@ def insert_activation_results(db_config, activation_results, stagingid):
 
     except Exception as bulk_e:
         conn.rollback()
+        stats["failed_records"].append({
+        "record": f"BULK_INSERT_{len(records)}_RECORDS",
+        "error": str(bulk_e)
+    })
+
         logger.warning(
             f"Bulk insert failed, switching to row-by-row insert: {bulk_e}"
         )
@@ -271,12 +276,12 @@ def insert_activation_results(db_config, activation_results, stagingid):
                     }
                 )
 
-        stats["failed"] = len(stats["failed_records"])
         if stats["failed_records"]:
             logger.error(
                 f"Row-by-row insert completed with {stats['failed']} failed records"
             )
     finally:
         close_db_connection(conn, cur)
+    stats["failed"] = len(stats["failed_records"])
 
     return stats
