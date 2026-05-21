@@ -32,6 +32,7 @@ _VISICOOLER_SUBCATS = {601, 602, 603, 604, 605}
 # Activation YOLO — singleton, lazy-loaded once per process
 # ---------------------------------------------------------------------------
 _ACTIVATION_YOLO = None
+_GPT_QUOTA_EXHAUSTED = False
 
 
 def get_activation_yolo(model_path):
@@ -390,15 +391,19 @@ def is_threshold_met(store_type, store_cls, footfall_count, transaction_count):
 # ---------------------------------------------------------------------------
 # call_gpt_vision
 # ---------------------------------------------------------------------------
-def call_gpt_vision(image_path, prompt_text, chatgpt_config):
+def call_gpt_vision(image_path, prompt_text, chatgpt_config, max_retries=5, base_delay=2.0):
     """
-    Send one image to GPT-4o vision API with the activation detection prompt.
+    Send one image to GPT-4o vision API with exponential backoff on 429.
 
     Returns
     -------
     list of dicts: [{"class_name": str, "class_id": int, "confidence": int}, ...]
     Only Y results with confidence >= 40.  Empty list on any error.
     """
+    global _GPT_QUOTA_EXHAUSTED
+    if _GPT_QUOTA_EXHAUSTED:
+        logger.warning(f"  GPT skipped (quota exhausted): {os.path.basename(image_path)}")
+        return []
     try:
         with open(image_path, "rb") as f:
             image_bytes = f.read()
@@ -422,10 +427,7 @@ def call_gpt_vision(image_path, prompt_text, chatgpt_config):
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "text",
-                            "text": prompt_text,
-                        },
+                        {"type": "text", "text": prompt_text},
                         {
                             "type": "image_url",
                             "image_url": {
@@ -442,14 +444,79 @@ def call_gpt_vision(image_path, prompt_text, chatgpt_config):
             "Authorization": f"Bearer {chatgpt_config['api_key']}",
             "Content-Type" : "application/json",
         }
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60,
-        )
-        response.raise_for_status()
 
+        # ── Retry loop with exponential backoff ──────────────────────────
+        response = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = requests.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=60,
+                )
+
+                if response.status_code == 429:
+                    logger.warning(f"  GPT 429 response body: {response.text}")
+
+                    # Check if it's quota exhaustion — no point retrying
+                    try:
+                        err_code = response.json().get("error", {}).get("code", "")
+                        if err_code == "insufficient_quota":
+                            _GPT_QUOTA_EXHAUSTED = True
+                            logger.error(
+                                f"  GPT: OpenAI quota exhausted (insufficient_quota) — "
+                                f"skipping all further GPT calls. Top up credits to continue."
+                            )
+                            return []
+                    except Exception:
+                        pass
+
+                    # Otherwise it's a rate limit — retry with backoff
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after:
+                        wait = float(retry_after)
+                        logger.warning(
+                            f"  GPT 429 (attempt {attempt}/{max_retries}) — "
+                            f"Retry-After={wait}s for {os.path.basename(image_path)}"
+                        )
+                    else:
+                        wait = base_delay * (2 ** (attempt - 1))   # 2, 4, 8, 16, 32 …
+                        logger.warning(
+                            f"  GPT 429 (attempt {attempt}/{max_retries}) — "
+                            f"backing off {wait:.1f}s for {os.path.basename(image_path)}"
+                        )
+
+                    if attempt == max_retries:
+                        logger.error(
+                            f"  GPT: max retries ({max_retries}) exhausted for "
+                            f"{os.path.basename(image_path)} — giving up."
+                        )
+                        return []
+
+                    time.sleep(wait)
+                    continue   # next attempt
+
+                # Any other HTTP error — fail immediately (no point retrying 401, 400, etc.)
+                response.raise_for_status()
+                break   # success — exit retry loop
+
+            except requests.exceptions.Timeout:
+                logger.warning(
+                    f"  GPT timeout (attempt {attempt}/{max_retries}) for "
+                    f"{os.path.basename(image_path)}"
+                )
+                if attempt == max_retries:
+                    logger.error(f"  GPT: max retries exhausted after timeouts.")
+                    return []
+                time.sleep(base_delay * (2 ** (attempt - 1)))
+
+        # If we exited the retry loop without ever getting a response
+        if response is None:
+            logger.error(f"  GPT: no response obtained for {os.path.basename(image_path)}")
+            return []
+
+        # ── Parse response ───────────────────────────────────────────────
         response_text = response.json()["choices"][0]["message"]["content"]
 
         if response_text is None:
@@ -470,13 +537,11 @@ def call_gpt_vision(image_path, prompt_text, chatgpt_config):
         results = []
         for d in raw_detections:
             class_name = d.get("class_name", "")
-            result_val = d.get("result", "N")      
+            result_val = d.get("result", "N")
             confidence = d.get("confidence", 0)
 
             if class_name not in GPT_CLASS_MAP:
-                logger.debug(
-                    f"  GPT unknown class '{class_name}' — skipped"
-                )
+                logger.debug(f"  GPT unknown class '{class_name}' — skipped")
                 continue
 
             if result_val == "Y" and confidence < 40:
@@ -882,7 +947,7 @@ def run_yolo_analysis(
                     gpt_detections = call_gpt_vision(
                         entry["local_path"], prompt_text, chatgpt_cfg
                     )
-                    time.sleep(1)  # brief pause to avoid hitting rate limits
+                    time.sleep(3)  # brief pause to avoid hitting rate limits
 
                     for detection in gpt_detections:
                         cid      = detection["class_id"]
