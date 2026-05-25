@@ -1,0 +1,8 @@
+rowid,modelname,imagefilename,classid,classtext,value,inference,modelrun,processed_flag,storeid,storename,s3path_actual_file,s3path_annotated_file
+1,yolo_activation,IMG-MNRKNRTC-QGJM.jpg,1027,Table Sticker,Y,1.0,2026-05-22 15:18:15.995067,N,2110111753,HARATI NEWARI RESTAURANT,april_store_images/IMG-MNRKNRTC-QGJM.jpg,ModelResults/VisibleItem_281/IMG-MNRKNRTC-QGJM.jpg
+2,yolo_activation,IMG-MNJ4MW17-MRHD.jpg,1085,Front Window Branding,Y,1.0,2026-05-22 15:18:55.424896,N,3110110534,MAJHARI BHOJANALAYA & MISTHAN,april_store_images/IMG-MNJ4MW17-MRHD.jpg,ModelResults/VisibleItem_281/IMG-MNJ4MW17-MRHD.jpg
+3,yolo_activation,IMG-MNJ4MW17-MRHD.jpg,1064,Shelf Display,Y,1.0,2026-05-22 15:18:55.424896,N,3110110534,MAJHARI BHOJANALAYA & MISTHAN,april_store_images/IMG-MNJ4MW17-MRHD.jpg,ModelResults/VisibleItem_281/IMG-MNJ4MW17-MRHD.jpg
+4,yolo_activation,IMG-MNOSR5B0-UROQ.jpg,1019,Poster,Y,1.0,2026-05-22 15:18:56.640656,N,3220110835,NEW GULMELI RESTURENT,april_store_images/IMG-MNOSR5B0-UROQ.jpg,ModelResults/VisibleItem_281/IMG-MNOSR5B0-UROQ.jpg
+5,yolo_activation,IMG-MNOSR5B0-UROQ.jpg,1040,Pillar branding,Y,1.0,2026-05-22 15:18:56.640656,N,3220110835,NEW GULMELI RESTURENT,april_store_images/IMG-MNOSR5B0-UROQ.jpg,ModelResults/VisibleItem_281/IMG-MNOSR5B0-UROQ.jpg
+6,yolo_activation,IMG-MNOSR5B0-UROQ.jpg,1075,PET Floor Stacking,Y,1.0,2026-05-22 15:18:56.640656,N,3220110835,NEW GULMELI RESTURENT,april_store_images/IMG-MNOSR5B0-UROQ.jpg,ModelResults/VisibleItem_281/IMG-MNOSR5B0-UROQ.jpg
+7,yolo_activation,IMG-MNOSR4T5-9OAZ.jpg,1022,Combo Board,Y,1.0,2026-05-22 15:18:57.288307,N,3220110835,NEW GULMELI RESTURENT,april_store_images/IMG-MNOSR4T5-9OAZ.jpg,ModelResults/VisibleItem_281/IMG-MNOSR4T5-9OAZ.jpg

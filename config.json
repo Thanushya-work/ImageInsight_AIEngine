@@ -1,0 +1,48 @@
+{
+  "db_config": {
+    "host": "100.42.188.112",
+    "port": 5432,
+    "database": "ImageInsight",
+    "user": "postgres",
+    "password": "sconex"
+  },
+  "s3_config": {
+    "bucket_name": "imageinsightimagesbeverages",
+    "image_folder_s3": "april_store_images/",
+    "access_key": "AKIA6D6JBNORLYOWHTZZ",
+    "secret_key": "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",
+    "region": "ap-south-1"
+  },
+  "chatgpt_config": {
+    "api_key": "",
+    "model": "gpt-4o",
+    "max_tokens": 2048,
+    "temperature": 0,
+    "image_detail": "auto",
+    "max_image_px": 1024,
+    "output_csv": "outputs/llm_rescorer_results.csv",
+    "prompt_file": "data/prompts/extended_group1.txt"
+  },
+  "ollama_config": {
+    "image_folder_s3": "STORE_IMAGES/",
+    "output_s3_folder": "ModelResults/",
+    "activation_yolo_model": "data/activation_april.pt",
+    "activation_conf_threshold": 0.1,
+    "output_csv": "outputs/yolo_analysis_results.csv",
+    "class_ids_path": "data/class_ids.json",
+    "prompt_path": "data/prompts/",
+    "prompt_files": {
+      "extended_visibility_all": "extended_visibility_all.txt",
+      "extended_visibility_group1": "extended_group1.txt"
+    }
+  },
+  "visicooler_config": {
+    "caps_model_path": "data/capsmodel_6th_may.pt",
+    "sku_model_path": "data/availability_may_5th.pt",
+    "model_path": "data/capsmodel_6th_may.pt",
+    "output_folder_path": "outputs/segmented_images/",
+    "cap_conf_threshold": 0.2,
+    "sku_conf_threshold": 0.5,
+    "conf_threshold": 0.12
+  }
+}
